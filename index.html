@@ -224,6 +224,7 @@ const LS_STATE = "crm_celio_state_v1", LS_KEY = "crm_celio_key_v1";
 
 /* ============================== ESTADO ============================== */
 let BASE = [];         // leads da pesquisa (descriptografados)
+let SYNC = null;       // configuração da nuvem que vem junto, criptografada
 let S = null;          // estado editável
 let view = "hoje";
 let pos = null;        // posição GPS
@@ -260,6 +261,7 @@ async function decryptWith(key, enc){
   const pt = await crypto.subtle.decrypt({name:"AES-GCM", iv:b64d(enc.iv)}, key, b64d(enc.ct));
   return JSON.parse(new TextDecoder().decode(pt));
 }
+function usarPacote(d){ if(Array.isArray(d)){ BASE=d; } else { BASE=d.leads||[]; SYNC=d.sync||null; } }
 let ENC = null;
 async function getEnc(){
   if(ENC) return ENC;
@@ -271,7 +273,7 @@ async function tryRemembered(){
   try{
     const enc = await getEnc();
     const key = await crypto.subtle.importKey("raw", b64d(raw), "AES-GCM", false, ["decrypt"]);
-    BASE = await decryptWith(key, enc); return true;
+    usarPacote(await decryptWith(key, enc)); return true;
   }catch(e){ localStorage.removeItem(LS_KEY); return false; }
 }
 document.getElementById("lockForm").addEventListener("submit", async ev=>{
@@ -280,7 +282,7 @@ document.getElementById("lockForm").addEventListener("submit", async ev=>{
   try{
     const enc = await getEnc();
     const key = await deriveKey(document.getElementById("pw").value.trim(), enc);
-    BASE = await decryptWith(key, enc);
+    usarPacote(await decryptWith(key, enc));
     if(document.getElementById("remember").checked) localStorage.setItem(LS_KEY, b64e(await crypto.subtle.exportKey("raw", key)));
     start();
   }catch(e){ msg.textContent = "Senha incorreta. Confira e tente de novo."; }
@@ -740,7 +742,13 @@ function render(){
 }
 function start(){
   $("#lockView").classList.add("hidden"); $("#app").classList.remove("hidden");
-  loadState(); initFiltros(); render();
+  loadState();
+  if(SYNC && SYNC.url && !S.cfg.supaUrl){
+    S.cfg.supaUrl=SYNC.url; S.cfg.supaKey=SYNC.key; S.cfg.supaSecret=SYNC.secret;
+    if(Object.keys(S.leads).length || S.custom.length) dirty.add("*");
+    save(["cfg"]);
+  }
+  initFiltros(); render();
   if(S.cfg.supaUrl) sync(false).then(render);
 }
 (async()=>{
