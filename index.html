@@ -212,6 +212,8 @@ const SEG = {
 };
 const CAT_NOME = {alimentar:"Ração 1 · Alimentar", agropet:"Ração 2 · Agro e Pet", chinelos:"Chinelos"};
 const catsDe = l => (SEG[l.segmento]||SEG.S3).cat;
+// "ambos" = pode ofertar ração e chinelo; "soracao" = só ração (chinelo vai só pra mercado)
+function passaCat(l,k){ const c=catsDe(l); if(k==="ambos") return c.includes("chinelos"); if(k==="soracao") return !c.includes("chinelos"); return c.includes(k); }
 const STATUS = [
   ["abordar","A abordar"],["cliente","Já é cliente"],["enviada","Mensagem enviada"],["conversa","Em conversa"],
   ["agendada","Visita agendada"],["visitou","Visitou"],["pedido","Pedido feito / ativo"],["perdido","Perdido"],["naocontatar","Não contatar"],
@@ -466,7 +468,8 @@ function pedirGps(){
 function initFiltros(){
   $("#fSeg").innerHTML=[["","Todos"]].concat(Object.entries(SEG).map(([k,v])=>[k,v.nome])).map(([k,t])=>`<button class="pill${k===ui.seg?" on":""}" data-seg="${k}">${t}</button>`).join("");
   $("#fSeg").querySelectorAll("button").forEach(b=>b.onclick=()=>{ ui.seg=b.dataset.seg; initFiltros(); renderLeads(); });
-  $("#fCat").innerHTML=[["","Todos os catálogos"],["alimentar","Ração 1 · Alimentar"],["agropet","Ração 2 · Agro e Pet"],["chinelos","Chinelos"]].map(([k,t])=>`<button class="pill${k===ui.cat?" on":""}" data-cat="${k}">${t}</button>`).join("");
+  const nCat=k=>allLeads().filter(l=>passaCat(l,k)).length;
+  $("#fCat").innerHTML=[["","Todos"],["ambos","Ração + Chinelo"],["soracao","Só ração"],["alimentar","Ração 1 · Alimentar"],["agropet","Ração 2 · Agro e Pet"]].map(([k,t])=>[k,k?`${t} (${nCat(k)})`:t]).map(([k,t])=>`<button class="pill${k===ui.cat?" on":""}" data-cat="${k}">${t}</button>`).join("");
   $("#fCat").querySelectorAll("button").forEach(b=>b.onclick=()=>{ ui.cat=b.dataset.cat; initFiltros(); renderLeads(); });
   $("#fStatus").innerHTML=`<option value="">Todos os status</option><option value="ativos">Em aberto (sem clientes e descartados)</option>`+STATUS.map(([k,t])=>`<option value="${k}">${t}</option>`).join("");
 }
@@ -478,7 +481,7 @@ function renderLeads(){
   let L=allLeads().filter(l=>{
     const s=st(l.id);
     if(ui.seg && l.segmento!==ui.seg) return false;
-    if(ui.cat && !catsDe(l).includes(ui.cat)) return false;
+    if(ui.cat && !passaCat(l,ui.cat)) return false;
     if(cid && l.cidade!==cid) return false;
     if(fs==="ativos" ? ["cliente","perdido","naocontatar"].includes(s.status) : (fs && s.status!==fs)) return false;
     if(ui.wa && l.telefone_tipo!=="celular") return false;
