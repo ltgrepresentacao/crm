@@ -131,7 +131,7 @@ table.t th:first-child,table.t td:first-child{text-align:left}
     <h1>CRM do Célio</h1>
     <p class="note">LTG Representações · Goiânia e Aparecida</p>
     <label class="f" for="pw">Senha</label>
-    <input class="i" id="pw" type="password" autocomplete="current-password" required>
+    <input class="i" id="pw" type="password" autocomplete="current-password" autocapitalize="none" autocorrect="off" spellcheck="false" required>
     <label style="display:flex;gap:8px;align-items:center;margin:12px 0;font-size:15px"><input type="checkbox" id="remember" checked> Lembrar neste aparelho</label>
     <button class="btn primary" style="width:100%" type="submit">Entrar</button>
     <p id="lockMsg" class="note" style="margin-top:10px"></p>
@@ -265,7 +265,7 @@ function usarPacote(d){ if(Array.isArray(d)){ BASE=d; } else { BASE=d.leads||[];
 let ENC = null;
 async function getEnc(){
   if(ENC) return ENC;
-  const r = await fetch("data.enc.json", {cache:"no-cache"});
+  const r = await fetch("data.enc.json?v="+Date.now(), {cache:"no-store"});
   ENC = await r.json(); return ENC;
 }
 async function tryRemembered(){
@@ -281,11 +281,12 @@ document.getElementById("lockForm").addEventListener("submit", async ev=>{
   const msg = document.getElementById("lockMsg"); msg.textContent = "Abrindo…";
   try{
     const enc = await getEnc();
-    const key = await deriveKey(document.getElementById("pw").value.trim(), enc);
-    usarPacote(await decryptWith(key, enc));
+    const key = await deriveKey(document.getElementById("pw").value.trim().toLowerCase().replace(/\s+/g,""), enc);
+    try{ usarPacote(await decryptWith(key, enc)); }
+    catch(e){ msg.textContent = "Senha incorreta. Confira e tente de novo (sem espaços)."; return; }
     if(document.getElementById("remember").checked) localStorage.setItem(LS_KEY, b64e(await crypto.subtle.exportKey("raw", key)));
     start();
-  }catch(e){ msg.textContent = "Senha incorreta. Confira e tente de novo."; }
+  }catch(e){ msg.textContent = "Não consegui abrir agora. Confira a internet e recarregue a página."; console.error(e); }
 });
 
 /* ============================== UTIL ============================== */
