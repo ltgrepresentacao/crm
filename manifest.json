@@ -1,0 +1,10 @@
+{
+  "name": "CRM Célio",
+  "short_name": "CRM Célio",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f6f3",
+  "theme_color": "#0f5132",
+  "icons": [{"src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable"}]
+}
