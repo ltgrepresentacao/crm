@@ -324,24 +324,46 @@ function diaTexto(){
 }
 
 /* ============================== MENSAGENS ============================== */
-function msgAbordagem(l){
-  const n=S.cfg.nome, e=S.cfg.empresa, s=saudacao(), nb=noBairro(l), dia=diaTexto();
-  switch(l.segmento){
-    case "S1": return `${s}! Aqui é o ${n}, da ${e}. Atendo supermercados ${nb} com a ração Prestige, que é exclusiva do canal alimentar (não vai pra pet shop, então não briga com o preço da sua gôndola), além de petiscos, erva-mate Goat e chinelos Danper pro bazar. Vou passar ${nb} ${dia}. Posso deixar o catálogo e umas amostras em 5 minutinhos? Com quem eu falo das compras?`;
-    case "S2": return `${s}! Aqui é o ${n}, da ${e}. Atendo mercados ${nb} com a ração Prestige em pacote de 1 e 3 kg, que gira rápido, mais petiscos, erva-mate Goat e chinelos. Vou passar aí ${dia}. Posso te mostrar em 5 minutinhos? Com quem eu falo das compras?`;
-    case "S3": return `${s}! Aqui é o ${n}, da ${e}. Trabalho com Facilittá, Magnífica e Rêneff em saco de 15 e 25 kg, mais mastigáveis naturais e o Fertmais pra jardim, com entrega na rota. Vou estar ${nb} ${dia}. Posso dar uma passada rápida pra te deixar a tabela?`;
-    case "S4": return `${s}! Aqui é o ${n}, da ${e}. Atendo pet shops da região com a Magnífica e a Prediletta, mais os petiscos Prediletta, que vendem bem no caixa. Vou passar ${nb} ${dia}. Consigo te mostrar em 5 minutos?`;
-    case "S5": return `${s}! Aqui é o ${n}, da ${e}. Estou levando a Instinct Pro (+Air Dried, com carne fresca) pra algumas clínicas e pet shops da região. É linha exclusiva do canal pet, então não aparece no supermercado. Vou estar ${nb} ${dia}. Posso levar uma amostra pra você ver o grão?`;
-    case "S6": return `${s}! Aqui é o ${n}, da ${e}. Distribuo o Fertmais: fertilizante específico pra rosa do deserto, orquídea, flores e frutas, com dosador, validade de 3 anos e margem boa pra revenda. Vou passar ${nb} ${dia}. Posso te mostrar?`;
-    case "S7": return `${s}! Aqui é o ${n}, da ${e}. Estou apresentando a erva-mate Goat pra tereré (tradicional, guaraná e menta), caixa com 12. Vou estar ${nb} ${dia}. Posso deixar uma pra vocês provarem?`;
-    default:  return `${s}! Aqui é o ${n}, da ${e}. Vou passar ${nb} ${dia} com nosso catálogo. Posso dar uma passada rápida de 5 minutos?`;
-  }
+// Abordagem em 2 passos: (1) descobrir quem compra, com um motivo concreto;
+// (2) marcar a visita oferecendo dois horários. Uma marca forte por tipo de loja.
+const GANCHO = {
+  S1:{abre:"supermercados", produto:"a ração Prestige, que é exclusiva de mercado (não vai pra pet shop)", compras:"das compras de mercearia e bazar", amostra:"uma amostra da Prestige e o catálogo dos chinelos"},
+  S2:{abre:"mercados", produto:"a ração Prestige em pacote de 1 e 3 kg, que gira rápido", compras:"das compras", amostra:"uma amostra da Prestige"},
+  S3:{abre:"casas de ração", produto:"as rações Facilittá e Magnífica, com entrega na rota", compras:"das compras de ração", amostra:"uma amostra da Magnífica pra vocês verem o grão"},
+  S4:{abre:"pet shops", produto:"a Magnífica e os petiscos Prediletta", compras:"das compras", amostra:"uma amostra da Magnífica e dos petiscos Prediletta"},
+  S5:{abre:"clínicas e pet shops", produto:"a Instinct Pro, com carne fresca e exclusiva do canal pet", compras:"das compras de ração e petiscos", amostra:"uma amostra da Instinct Pro pra vocês verem o grão"},
+  S6:{abre:"floriculturas", produto:"o Fertmais, fertilizante específico pra rosa do deserto e orquídea", compras:"das compras", amostra:"um Fertmais pra vocês testarem"},
+  S7:{abre:"o comércio", produto:"a erva-mate Goat pra tereré", compras:"das compras", amostra:"uma Goat pra vocês provarem"},
+};
+const gancho = l => GANCHO[l.segmento] || GANCHO.S3;
+const cap = t => t.charAt(0).toUpperCase()+t.slice(1);
+const HORARIOS = "Fica melhor às 9h ou depois das 15h?";
+// Nome do dono como a pessoa falaria: primeiro + último nome ("Peter Heckmann")
+function nomeDono(l){
+  const p=(l.dono||"").trim().split(/\s+/).filter(x=>!/^(de|da|do|dos|das|e)$/i.test(x));
+  if(!p.length) return "";
+  const t=x=>x.charAt(0).toUpperCase()+x.slice(1).toLowerCase();
+  return p.length>1 ? t(p[0])+" "+t(p[p.length-1]) : t(p[0]);
 }
-function msgFollow(){ return `Oi, tudo bem? Só confirmando se consigo passar aí ${diaTexto()}. Se preferir, te mando o catálogo por aqui primeiro.`; }
-function msgDono(l, viaLoja){
-  const n=S.cfg.nome, e=S.cfg.empresa, d=primeiroNome(l.dono), nb=noBairro(l), linhas=(SEG[l.segmento]||{}).curtas||"nossas linhas";
-  if(viaLoja) return `${saudacao()}! Aqui é o ${n}, representante da ${e}. Gostaria de falar com ${d || "o proprietário"} sobre ${linhas}. Vou estar ${nb} ${diaTexto()} e preciso de só 5 minutinhos. Consegue me passar o melhor horário ou o contato dele(a)?`;
-  return `${saudacao()}${d?", "+d:""}! Aqui é o ${n}, representante da ${e}. Mandei mensagem pro WhatsApp da loja esses dias, mas sei que a rotina de loja é corrida. Achei melhor falar direto com você: tenho ${linhas} com condição boa pra lojista da região, e vou estar ${nb} ${diaTexto()}. Posso passar 5 minutinhos pra te mostrar?`;
+// Com quem pedir pra falar: rede grande -> comprador; dono conhecido -> pelo nome; senão -> proprietário
+function alvo(l){ return l.rede ? "" : (nomeDono(l) || "o proprietário"); }
+function msgAbordagem(l){
+  const g=gancho(l), a=alvo(l), ini=`${saudacao()}! Aqui é o ${S.cfg.nome}, representante da ${S.cfg.empresa}.`;
+  if(!a) return `${ini} Atendo ${g.abre} aqui ${noBairro(l)} com ${g.produto}. Quem cuida ${g.compras} aí?`;
+  return `${ini} Gostaria de falar com ${a} sobre ${g.produto}. ${cap(diaTexto())} vou estar aqui ${noBairro(l)} e preciso de só 5 minutinhos. Consegue me passar um bom horário ou o contato direto?`;
+}
+function msgMarcar(l){
+  const g=gancho(l), nome=primeiroNome(st(l.id).comprador||"");
+  return `${nome?`Prazer, ${nome}!`:"Obrigado pelo retorno!"} ${cap(diaTexto())} vou estar aqui perto e queria te mostrar as condições e deixar ${g.amostra}. ${HORARIOS} É coisa de 5 minutos.`;
+}
+function msgFollow(l){
+  const g=gancho(l), a=alvo(l);
+  if(!a) return `Oi, tudo bem? Só pra eu saber quem cuida ${g.compras} aí: ${diaTexto()} vou estar aqui perto e queria deixar ${g.amostra}.`;
+  return `Oi, tudo bem? Conseguiu ver com ${a} um horário? ${cap(diaTexto())} vou estar aqui perto, é coisa de 5 minutinhos.`;
+}
+function msgDono(l){
+  const g=gancho(l), d=primeiroNome(l.dono);
+  return `${saudacao()}${d?", "+d:""}! Aqui é o ${S.cfg.nome}, representante da ${S.cfg.empresa}. Deixei recado na loja, mas sei que a rotina é corrida, então achei melhor falar direto com você: atendo ${g.abre} aqui ${noBairro(l)} com ${g.produto}. ${cap(diaTexto())} vou estar aí perto e queria deixar ${g.amostra}. ${HORARIOS}`;
 }
 function msgCatalogo(l){
   const c=(SEG[l.segmento]||SEG.S3).cat;
@@ -365,7 +387,7 @@ function flags(l){
 }
 function registrar(id, tipo, txt){ const s=st(id); s.hist.unshift({t:new Date().toISOString(), tipo, txt}); touch(id); }
 function setStatus(id, novo, extra){
-  const s=st(id), antes=s.status; s.status=novo;
+  const s=st(id), antes=s.status; if(antes===novo && !extra) return; s.status=novo;
   if(novo==="enviada" && !s.enviadoEm) s.enviadoEm=new Date().toISOString();
   registrar(id,"status",`${STATUS_NOME[antes]||antes} → ${STATUS_NOME[novo]}${extra?": "+extra:""}`);
 }
@@ -426,7 +448,7 @@ function renderHoje(){
     ${bloco("Visitas de hoje",visitas,"Nenhuma visita agendada pra hoje. Marque visitas nas lojas que responderem.",l=>"às "+(st(l.id).visita||"").slice(11,16))}
     ${bloco("Falar com o dono (3 dias sem resposta)",planoB,"Ninguém travado. Quando uma loja ficar 3 dias sem responder, ela aparece aqui.")}
     ${bloco("Mandar follow-up (2 dias)",follow,"Nenhum follow-up pendente.")}
-    ${conversas.length?bloco("Em conversa",conversas,""):""}
+    ${conversas.length?bloco("Em conversa: mandar o 2º passo e marcar a visita",conversas,""):""}
     <h2 class="section-title">${visitas.length?"Aproveite a viagem: lojas perto das visitas":pos?"Lojas perto de você pra abordar":"Melhores lojas pra abordar"}</h2>
     ${sug.map(l=>cardHTML(l)).join("")||'<p class="empty">Todas as lojas já foram abordadas. 👏</p>'}
     ${pos?"":`<button class="btn ghost" style="width:100%;margin-top:6px" id="btnGps">📍 Usar minha localização pra sugerir lojas perto</button>`}
@@ -494,10 +516,10 @@ function openLead(id){
 
     <h3 class="section-title">Ações</h3>
     <div class="actions">
-      ${foneLoja?`<a class="btn wa big" data-act="abordar" href="${waLink(foneLoja,msgAbordagem(l))}" target="_blank" rel="noopener">💬 WhatsApp da loja: abordagem</a>`:`<span class="btn big" disabled>Loja sem telefone no cadastro</span>`}
-      ${foneLoja?`<a class="btn wa ${f.follow?"hot":""}" data-act="follow" href="${waLink(foneLoja,msgFollow())}" target="_blank" rel="noopener">↩ Follow-up</a>`:""}
-      ${foneDono?`<a class="btn wa ${f.planoB?"hot":""}" data-act="dono" href="${waLink(foneDono,msgDono(l,false))}" target="_blank" rel="noopener">👤 WhatsApp do dono</a>`
-               :(foneLoja?`<a class="btn ${f.planoB?"hot":""}" data-act="dono" href="${waLink(foneLoja,msgDono(l,true))}" target="_blank" rel="noopener">👤 Pedir pelo dono</a>`:"")}
+      ${foneLoja?`<a class="btn wa big" data-act="abordar" href="${waLink(foneLoja,msgAbordagem(l))}" target="_blank" rel="noopener">💬 1º passo: ${l.rede?"perguntar quem compra":"pedir pra falar com o dono"}</a>`:`<span class="btn big" disabled>Loja sem telefone no cadastro</span>`}
+      ${foneLoja?`<a class="btn wa big ${s.status==="conversa"?"hot":""}" data-act="marcar" href="${waLink(foneLoja,msgMarcar(l))}" target="_blank" rel="noopener">📅 2º passo: marcar visita (9h ou 15h)</a>`:""}
+      ${foneLoja?`<a class="btn wa ${f.follow?"hot":""}" data-act="follow" href="${waLink(foneLoja,msgFollow(l))}" target="_blank" rel="noopener">↩ Follow-up</a>`:""}
+      ${foneDono?`<a class="btn wa ${f.planoB?"hot":""}" data-act="dono" href="${waLink(foneDono,msgDono(l))}" target="_blank" rel="noopener">👤 WhatsApp direto do dono</a>`:""}
       ${foneLoja?`<a class="btn" data-act="catalogo" href="${waLink(foneLoja,msgCatalogo(l))}" target="_blank" rel="noopener">📄 Enviar catálogo</a>`:""}
       ${foneLoja?`<a class="btn" href="tel:+${normFone(foneLoja)}">📞 Ligar</a>`:""}
       ${foneCnpj&&!foneDono?`<a class="btn" href="tel:+${normFone(foneCnpj)}">📞 Ligar tel. do CNPJ</a>`:""}
@@ -505,8 +527,13 @@ function openLead(id){
       ${l.instagram?`<a class="btn" href="https://instagram.com/${encodeURIComponent(l.instagram)}" target="_blank" rel="noopener">📷 Instagram</a>`:""}
       ${!l.cnpj?`<a class="btn" href="${busca}" target="_blank" rel="noopener">🔎 Buscar CNPJ</a>`:""}
     </div>
-    ${f.planoB?`<p class="note" style="color:var(--warn)">Já são ${diasDesde(s.enviadoEm)} dias sem resposta: hora de falar direto com o dono.</p>`:""}
-    <details style="margin-top:8px"><summary class="note">Ver a mensagem de abordagem</summary><div class="preview">${esc(msgAbordagem(l))}</div></details>
+    ${f.planoB?`<p class="note" style="color:var(--warn)">Já são ${diasDesde(s.enviadoEm)} dias sem resposta: ${foneDono?"mande direto pro celular do dono":"ligue pra loja ou passe lá pessoalmente"}.</p>`:""}
+    <p class="note" style="margin-top:8px">Quando responderem (com o horário ou o contato), anote o nome em "Quem compra" e toque no 2º passo: a mensagem sai com o nome da pessoa. Se derem o número do dono, cadastre a conversa com ele e mande o 2º passo pra ele.</p>
+    <details><summary class="note">Ver as mensagens</summary><div class="preview"><b>1º passo:</b>
+${esc(msgAbordagem(l))}
+
+<b>2º passo:</b>
+${esc(msgMarcar(l))}</div></details>
 
     <h3 class="section-title">Status</h3>
     <div class="status-grid" id="stGrid">${STATUS.map(([k,t])=>`<button data-st="${k}" class="${s.status===k?"on":""}">${t}</button>`).join("")}</div>
@@ -552,6 +579,11 @@ function openLead(id){
     if(bloqueado){ return; }
     const act=a.dataset.act, s=st(id);
     if(act==="abordar"){ if(s.status==="abordar"){ setStatus(id,"enviada"); contarEnvio(); } else registrar(id,"msg","Mandou nova mensagem de abordagem"); }
+    if(act==="marcar"){
+      if(!s.comprador){ const nm=prompt("Nome de quem compra (deixe em branco se não souber):",""); if(nm&&nm.trim()){ s.comprador=nm.trim(); a.href=waLink(l.telefone,msgMarcar(l)); } }
+      if(["abordar","enviada"].includes(s.status)){ if(s.status==="abordar") contarEnvio(); setStatus(id,"conversa"); }
+      registrar(id,"msg","2º passo: pediu horário pra visita (9h ou 15h)");
+    }
     if(act==="follow"){ s.followEm=new Date().toISOString(); registrar(id,"msg","Mandou follow-up"); }
     if(act==="dono"){ s.planoBEm=new Date().toISOString(); registrar(id,"msg", l.telefone_cnpj?"Plano B: mensagem direto pro dono":"Plano B: pediu pra falar com o dono"); }
     if(act==="catalogo"){ registrar(id,"msg","Enviou o catálogo"); }
