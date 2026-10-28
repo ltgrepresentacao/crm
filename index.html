@@ -859,6 +859,11 @@ function start(){
     if(Object.keys(S.leads).length || S.custom.length) dirty.add("*");
     save(["cfg"]);
   }
+  // o que mudou no aparelho desde a última sincronização (ex.: nuvem fora do ar) sobe de novo
+  const ult=S.cfg.lastSync||"";
+  for(const [id,v] of Object.entries(S.leads)) if(v.updated && v.updated>ult) dirty.add("lead:"+id);
+  if(S.custom.length) dirty.add("custom");
+  dirty.add("log");
   initFiltros(); render();
   if(S.cfg.supaUrl) sync(false).then(render);
 }
