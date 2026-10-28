@@ -65,7 +65,7 @@ nav.tabs button.on{color:var(--brand);font-weight:600}
 .st-enviada,.st-conversa{background:var(--info-soft);color:var(--info);border-color:transparent}
 .st-agendada,.st-visitou{background:var(--warn-soft);color:var(--warn);border-color:transparent}
 .st-pedido,.st-cliente{background:var(--brand-soft);color:var(--brand);border-color:transparent}
-.st-perdido,.st-naocontatar{background:var(--danger-soft);color:var(--danger);border-color:transparent}
+.st-perdido,.st-naocontatar,.st-fechou{background:var(--danger-soft);color:var(--danger);border-color:transparent}
 .alert{background:var(--warn-soft);color:var(--warn);border-color:transparent;font-weight:600}
 .filters{display:flex;gap:8px;overflow-x:auto;padding:8px 0 4px;scrollbar-width:none}
 .filters::-webkit-scrollbar{display:none}
@@ -167,6 +167,9 @@ table.t th:first-child,table.t td:first-child{text-align:left}
       <div id="leadList"></div>
     </section>
 
+    <!-- MAPA -->
+    <section id="v-mapa" class="hidden"></section>
+
     <!-- PAINEL -->
     <section id="v-painel" class="hidden"></section>
 
@@ -177,6 +180,7 @@ table.t th:first-child,table.t td:first-child{text-align:left}
   <nav class="tabs">
     <button data-v="hoje" class="on"><b>☀</b>Hoje</button>
     <button data-v="leads"><b>☰</b>Lojas</button>
+    <button data-v="mapa"><b>🗺</b>Mapa</button>
     <button data-v="painel"><b>▦</b>Painel</button>
     <button data-v="mais"><b>⋯</b>Mais</button>
   </nav>
@@ -216,7 +220,7 @@ const catsDe = l => (SEG[l.segmento]||SEG.S3).cat;
 function passaCat(l,k){ const c=catsDe(l); if(k==="ambos") return c.includes("chinelos"); if(k==="soracao") return !c.includes("chinelos"); return c.includes(k); }
 const STATUS = [
   ["abordar","A abordar"],["cliente","Já é cliente"],["enviada","Mensagem enviada"],["conversa","Em conversa"],
-  ["agendada","Visita agendada"],["visitou","Visitou"],["pedido","Pedido feito / ativo"],["perdido","Perdido"],["naocontatar","Não contatar"],
+  ["agendada","Visita agendada"],["visitou","Visitou"],["pedido","Pedido feito / ativo"],["perdido","Perdido"],["naocontatar","Não contatar"],["fechou","Fechou / não existe mais"],
 ];
 const STATUS_NOME = Object.fromEntries(STATUS);
 const MOTIVOS = ["Preço","Prazo / pagamento","Já tem fornecedor","Sem espaço na loja","Não trabalha com a linha","Outro"];
@@ -347,25 +351,29 @@ function nomeDono(l){
   const t=x=>x.charAt(0).toUpperCase()+x.slice(1).toLowerCase();
   return p.length>1 ? t(p[0])+" "+t(p[p.length-1]) : t(p[0]);
 }
-// Com quem pedir pra falar: rede grande -> comprador; dono conhecido -> pelo nome; senão -> proprietário
-function alvo(l){ return l.rede ? "" : (nomeDono(l) || "o proprietário"); }
+const INI = () => `${saudacao()}! Aqui é o ${S.cfg.nome}, representante da ${S.cfg.empresa}.`;
+// 1º passo: só achar o responsável pelas compras (não tenta marcar visita ainda)
 function msgAbordagem(l){
-  const g=gancho(l), a=alvo(l), ini=`${saudacao()}! Aqui é o ${S.cfg.nome}, representante da ${S.cfg.empresa}.`;
-  if(!a) return `${ini} Atendo ${g.abre} aqui ${noBairro(l)} com ${g.produto}. Quem cuida ${g.compras} aí?`;
-  return `${ini} Gostaria de falar com ${a} sobre ${g.produto}. ${cap(diaTexto())} vou estar aqui ${noBairro(l)} e preciso de só 5 minutinhos. Consegue me passar um bom horário ou o contato direto?`;
+  const g=gancho(l);
+  return `${INI()} Atendo ${g.abre} aqui ${noBairro(l)} com ${g.produto}. Gostaria de falar com o responsável pelo departamento de compras${l.rede_nome?` da ${l.rede_nome}`:""}. Pode me passar o nome e o contato?`;
 }
+// rede: mensagem pro escritório/sede, que compra pra todas as lojas
+function msgRede(l){
+  const g=gancho(l);
+  return `${INI()} Atendo ${g.abre} aqui em Goiânia com ${g.produto}. Gostaria de falar com o responsável pelo departamento de compras da ${l.rede_nome||"rede"}. Pode me passar o nome e o contato?`;
+}
+// 2º passo: com o comprador identificado, marcar a visita
 function msgMarcar(l){
   const g=gancho(l), nome=primeiroNome(st(l.id).comprador||"");
-  return `${nome?`Prazer, ${nome}!`:"Obrigado pelo retorno!"} ${cap(diaTexto())} vou estar aqui perto e queria te mostrar as condições e deixar ${g.amostra}. ${HORARIOS} É coisa de 5 minutos.`;
+  return `${nome?`Olá, ${nome}! Aqui é o ${S.cfg.nome}, representante da ${S.cfg.empresa}.`:INI()} Atendo ${g.abre} aqui ${noBairro(l)} com ${g.produto}. ${cap(diaTexto())} vou estar aqui perto e queria te mostrar as condições e deixar ${g.amostra}. ${HORARIOS} É coisa de 5 minutos.`;
 }
 function msgFollow(l){
-  const g=gancho(l), a=alvo(l);
-  if(!a) return `Oi, tudo bem? Só pra eu saber quem cuida ${g.compras} aí: ${diaTexto()} vou estar aqui perto e queria deixar ${g.amostra}.`;
-  return `Oi, tudo bem? Conseguiu ver com ${a} um horário? ${cap(diaTexto())} vou estar aqui perto, é coisa de 5 minutinhos.`;
+  return `Oi, tudo bem? Só reforçando: consegue me passar o nome e o contato do responsável pelas compras? Assim eu já falo direto com a pessoa certa.`;
 }
+// 3 dias sem resposta e o celular do dono está no CNPJ: pedir a indicação do comprador
 function msgDono(l){
   const g=gancho(l), d=primeiroNome(l.dono);
-  return `${saudacao()}${d?", "+d:""}! Aqui é o ${S.cfg.nome}, representante da ${S.cfg.empresa}. Deixei recado na loja, mas sei que a rotina é corrida, então achei melhor falar direto com você: atendo ${g.abre} aqui ${noBairro(l)} com ${g.produto}. ${cap(diaTexto())} vou estar aí perto e queria deixar ${g.amostra}. ${HORARIOS}`;
+  return `${saudacao()}${d?", "+d:""}! Aqui é o ${S.cfg.nome}, representante da ${S.cfg.empresa}. Mandei mensagem pra loja procurando o responsável pelas compras, mas sei que a rotina é corrida. Atendo ${g.abre} aqui ${noBairro(l)} com ${g.produto}. Pode me indicar quem cuida das compras aí?`;
 }
 function msgCatalogo(l){
   const c=(SEG[l.segmento]||SEG.S3).cat;
@@ -427,7 +435,7 @@ function bindCards(root){ root.querySelectorAll(".lead").forEach(el=>el.addEvent
 /* ============================== RENDER: HOJE ============================== */
 function renderHoje(){
   const L=allLeads(), hoje=hojeISO();
-  const ativos=L.filter(l=>!["naocontatar","cliente","perdido"].includes(st(l.id).status));
+  const ativos=L.filter(l=>!["naocontatar","cliente","perdido","fechou"].includes(st(l.id).status));
   const visitas=ativos.filter(l=>st(l.id).status==="agendada" && (st(l.id).visita||"").slice(0,10)<=hoje)
                       .sort((a,b)=>(st(a.id).visita||"").localeCompare(st(b.id).visita||""));
   const planoB=ativos.filter(l=>flags(l).planoB), follow=ativos.filter(l=>flags(l).follow);
@@ -483,7 +491,7 @@ function renderLeads(){
     if(ui.seg && l.segmento!==ui.seg) return false;
     if(ui.cat && !passaCat(l,ui.cat)) return false;
     if(cid && l.cidade!==cid) return false;
-    if(fs==="ativos" ? ["cliente","perdido","naocontatar"].includes(s.status) : (fs && s.status!==fs)) return false;
+    if(fs==="ativos" ? ["cliente","perdido","naocontatar","fechou"].includes(s.status) : (fs && s.status!==fs)) return false;
     if(ui.wa && l.telefone_tipo!=="celular") return false;
     if(ui.dono && !l.dono) return false;
     if(q){ const h=[l.nome,l.bairro,l.endereco,l.dono,l.razao_social,l.cnpj,l.instagram,(l.socios||[]).map(x=>x.nome).join(" ")].join(" ").toLowerCase(); if(!h.includes(q)) return false; }
@@ -494,8 +502,7 @@ function renderLeads(){
   else if(ord==="recente") L.sort((a,b)=>(st(b.id).updated||"").localeCompare(st(a.id).updated||""));
   else L.sort((a,b)=>(b.score||0)-(a.score||0));
   $("#leadCount").textContent=`${L.length} loja(s)`;
-  const lim=L.slice(0,120);
-  $("#leadList").innerHTML=lim.map(l=>cardHTML(l)).join("")+(L.length>120?`<p class="empty">Mostrando 120. Use a busca ou os filtros pra achar o resto.</p>`:"")||`<p class="empty">Nenhuma loja com esses filtros.</p>`;
+  $("#leadList").innerHTML=L.map(l=>cardHTML(l)).join("")||`<p class="empty">Nenhuma loja com esses filtros.</p>`;
   bindCards($("#leadList"));
 }
 
@@ -519,10 +526,10 @@ function openLead(id){
 
     <h3 class="section-title">Ações</h3>
     <div class="actions">
-      ${foneLoja?`<a class="btn wa big" data-act="abordar" href="${waLink(foneLoja,msgAbordagem(l))}" target="_blank" rel="noopener">💬 1º passo: ${l.rede?"perguntar quem compra":"pedir pra falar com o dono"}</a>`:`<span class="btn big" disabled>Loja sem telefone no cadastro</span>`}
+      ${foneLoja?`<a class="btn wa big" data-act="abordar" href="${waLink(foneLoja,msgAbordagem(l))}" target="_blank" rel="noopener">💬 1º passo: pedir o responsável pelas compras</a>`:`<span class="btn big" disabled>Loja sem telefone no cadastro</span>`}
       ${foneLoja?`<a class="btn wa big ${s.status==="conversa"?"hot":""}" data-act="marcar" href="${waLink(foneLoja,msgMarcar(l))}" target="_blank" rel="noopener">📅 2º passo: marcar visita (9h ou 15h)</a>`:""}
       ${foneLoja?`<a class="btn wa ${f.follow?"hot":""}" data-act="follow" href="${waLink(foneLoja,msgFollow(l))}" target="_blank" rel="noopener">↩ Follow-up</a>`:""}
-      ${foneDono?`<a class="btn wa ${f.planoB?"hot":""}" data-act="dono" href="${waLink(foneDono,msgDono(l))}" target="_blank" rel="noopener">👤 WhatsApp direto do dono</a>`:""}
+      ${foneDono?`<a class="btn wa ${f.planoB?"hot":""}" data-act="dono" href="${waLink(foneDono,msgDono(l))}" target="_blank" rel="noopener">👤 Dono: pedir indicação do comprador</a>`:""}
       ${foneLoja?`<a class="btn" data-act="catalogo" href="${waLink(foneLoja,msgCatalogo(l))}" target="_blank" rel="noopener">📄 Enviar catálogo</a>`:""}
       ${foneLoja?`<a class="btn" href="tel:+${normFone(foneLoja)}">📞 Ligar</a>`:""}
       ${foneCnpj&&!foneDono?`<a class="btn" href="tel:+${normFone(foneCnpj)}">📞 Ligar tel. do CNPJ</a>`:""}
@@ -530,8 +537,9 @@ function openLead(id){
       ${l.instagram?`<a class="btn" href="https://instagram.com/${encodeURIComponent(l.instagram)}" target="_blank" rel="noopener">📷 Instagram</a>`:""}
       ${!l.cnpj?`<a class="btn" href="${busca}" target="_blank" rel="noopener">🔎 Buscar CNPJ</a>`:""}
     </div>
+    ${l.rede_info?redeHTML(l):""}
     ${f.planoB?`<p class="note" style="color:var(--warn)">Já são ${diasDesde(s.enviadoEm)} dias sem resposta: ${foneDono?"mande direto pro celular do dono":"ligue pra loja ou passe lá pessoalmente"}.</p>`:""}
-    <p class="note" style="margin-top:8px">Quando responderem (com o horário ou o contato), anote o nome em "Quem compra" e toque no 2º passo: a mensagem sai com o nome da pessoa. Se derem o número do dono, cadastre a conversa com ele e mande o 2º passo pra ele.</p>
+    <p class="note" style="margin-top:8px">Quando passarem o nome e o contato do comprador, anote em "Quem compra" e toque no 2º passo: a mensagem marca a visita (9h ou 15h) já com o nome da pessoa.</p>
     <details><summary class="note">Ver as mensagens</summary><div class="preview"><b>1º passo:</b>
 ${esc(msgAbordagem(l))}
 
@@ -590,6 +598,7 @@ ${esc(msgMarcar(l))}</div></details>
     if(act==="follow"){ s.followEm=new Date().toISOString(); registrar(id,"msg","Mandou follow-up"); }
     if(act==="dono"){ s.planoBEm=new Date().toISOString(); registrar(id,"msg", l.telefone_cnpj?"Plano B: mensagem direto pro dono":"Plano B: pediu pra falar com o dono"); }
     if(act==="catalogo"){ registrar(id,"msg","Enviou o catálogo"); }
+    if(act==="rede"){ registrar(id,"msg","Mensagem pro comprador da rede (sede)"); }
     setTimeout(()=>openLead(id),400);
   }));
   if(bloqueado) sheet.querySelectorAll("a.wa,a[data-act]").forEach(a=>{ a.removeAttribute("href"); a.setAttribute("disabled",""); });
@@ -598,6 +607,29 @@ ${esc(msgMarcar(l))}</div></details>
   sheet.querySelectorAll("#chipsInt .chip").forEach(c=>c.onclick=()=>{ const s=st(id), i=c.dataset.i; s.interesse=(s.interesse||[]).includes(i)?s.interesse.filter(x=>x!==i):[...(s.interesse||[]),i]; c.classList.toggle("on"); touch(id); });
   [["pConc","concorrente"],["pPag","pagamento"],["pHora","melhorHorario"],["pComprador","comprador"]].forEach(([el,k])=>$("#"+el).addEventListener("change",e=>{ st(id)[k]=e.target.value; touch(id); toast("Salvo"); }));
   const del=$("#btnDel"); if(del) del.onclick=()=>{ if(confirm("Excluir esta loja?")){ S.custom=S.custom.filter(x=>x.id!==id); delete S.leads[id]; save(["custom","lead:"+id]); closeSheet(); } };
+}
+function redeHTML(l){
+  const r=l.rede_info, tels=(r.telefones||[]);
+  const cel=tels.find(t=>/^55\d\d9\d{8}$/.test(t)), primeiro=tels[0];
+  return `<div class="card" style="margin-top:10px;border-color:var(--info)">
+    <b>🏢 Contato da rede: ${esc(l.rede_nome)}</b>
+    <p class="note" style="margin:6px 0">A compra é feita pela sede para todas as lojas. Fale com o departamento de compras da rede, não com a loja.</p>
+    <dl class="kv">
+      ${r.razao_social?`<dt>Empresa</dt><dd>${esc(r.razao_social)}</dd>`:""}
+      ${r.sede?`<dt>Sede</dt><dd>${esc(r.sede)}</dd>`:""}
+      ${tels.length?`<dt>Telefone sede</dt><dd>${tels.map(t=>esc(fmtFone(t))).join(" · ")}</dd>`:""}
+      ${r.email?`<dt>E-mail</dt><dd><a href="mailto:${esc(r.email)}">${esc(r.email)}</a></dd>`:""}
+      ${r.administrador?`<dt>Administrador</dt><dd>${esc(r.administrador)}</dd>`:""}
+      ${r.site?`<dt>Site</dt><dd><a href="https://${esc(r.site)}" target="_blank" rel="noopener">${esc(r.site)}</a></dd>`:""}
+      ${r.instagram?`<dt>Instagram</dt><dd><a href="https://instagram.com/${esc(r.instagram)}" target="_blank" rel="noopener">@${esc(r.instagram)}</a></dd>`:""}
+    </dl>
+    ${r.obs?`<p class="note">ℹ️ ${esc(r.obs)}</p>`:""}
+    <div class="actions" style="margin-top:8px">
+      ${cel?`<a class="btn wa" data-act="rede" href="${waLink(cel,msgRede(l))}" target="_blank" rel="noopener">💬 WhatsApp da sede</a>`:""}
+      ${primeiro?`<a class="btn" href="tel:+${primeiro}">📞 Ligar na sede</a>`:""}
+      ${r.email?`<a class="btn" href="mailto:${esc(r.email)}?subject=${encodeURIComponent("Fornecedor - "+S.cfg.empresa)}&body=${encodeURIComponent(msgRede(l))}">✉ E-mail pra sede</a>`:""}
+    </div>
+  </div>`;
 }
 function statusExtra(id,novo){
   const box=$("#stExtra");
@@ -612,8 +644,51 @@ function statusExtra(id,novo){
     box.querySelectorAll(".chip").forEach(c=>c.onclick=()=>{ st(id).motivo=c.dataset.m; setStatus(id,"perdido",c.dataset.m); openLead(id); });
     return;
   }
+  if(novo==="fechou" && !confirm("Marcar que a loja fechou / não existe mais? Ela sai de todas as listas.")) return;
   if(novo==="naocontatar" && !confirm("Marcar como Não contatar? A loja sai de todas as listas de abordagem.")) return;
   setStatus(id,novo); toast(STATUS_NOME[novo]); openLead(id);
+}
+
+
+/* ============================== MAPA ============================== */
+const COR = {abordar:"#9ca3af",cliente:"#16a34a",enviada:"#60a5fa",conversa:"#2563eb",agendada:"#f59e0b",
+             visitou:"#ea580c",pedido:"#15803d",perdido:"#dc2626",naocontatar:"#111827",fechou:"#6b7280"};
+let MAPA=null, CAMADA=null, mapaRegiao="";
+function carregarLeaflet(){
+  if(window.L && window.L.map) return Promise.resolve();
+  return new Promise((ok,erro)=>{
+    const c=document.createElement("link"); c.rel="stylesheet"; c.href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"; document.head.appendChild(c);
+    const j=document.createElement("script"); j.src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"; j.onload=ok; j.onerror=erro; document.head.appendChild(j);
+  });
+}
+function renderMapa(){
+  const Ls=allLeads(), regs=[...new Set(Ls.map(l=>l.regiao_nome||"Outra"))];
+  const linha=r=>{ const a=Ls.filter(l=>(l.regiao_nome||"Outra")===r), c=k=>a.filter(l=>k.includes(st(l.id).status)).length;
+    return `<tr><td>${esc(r)}</td><td>${a.length}</td><td>${a.length-c(["abordar"])}</td><td>${c(["agendada"])}</td><td>${c(["visitou","pedido"])}</td><td>${c(["pedido","cliente"])}</td></tr>`; };
+  $("#v-mapa").innerHTML=`
+    <div class="filters" id="fReg">${[["","Todas as regiões"]].concat(regs.map(r=>[r,r])).map(([k,t])=>`<button class="pill${k===mapaRegiao?" on":""}" data-r="${esc(k)}">${esc(t)}</button>`).join("")}</div>
+    <div id="mapaBox" style="height:62vh;border-radius:14px;overflow:hidden;border:1px solid var(--line);margin-top:6px"></div>
+    <div class="chips" style="margin-top:8px">${STATUS.map(([k,t])=>`<span class="tag"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${COR[k]};margin-right:4px"></span>${t}</span>`).join("")}</div>
+    <button class="btn ghost" style="width:100%;margin-top:8px" id="btnGpsMapa">📍 Mostrar onde eu estou</button>
+    <h2 class="section-title">Por região</h2>
+    <div class="card" style="overflow-x:auto"><table class="t"><thead><tr><th>Região</th><th>Lojas</th><th>Tocadas</th><th>Visita marcada</th><th>Visitadas</th><th>Clientes</th></tr></thead><tbody>${regs.map(linha).join("")}</tbody></table></div>`;
+  $("#fReg").querySelectorAll("button").forEach(b=>b.onclick=()=>{ mapaRegiao=b.dataset.r; renderMapa(); });
+  $("#btnGpsMapa").onclick=()=>{ if(!navigator.geolocation) return; navigator.geolocation.getCurrentPosition(p=>{ pos={lat:p.coords.latitude,lng:p.coords.longitude}; if(MAPA){ window.L.circleMarker([pos.lat,pos.lng],{radius:9,color:"#000",fillColor:"#fff",fillOpacity:1,weight:3}).addTo(MAPA).bindPopup("Você está aqui"); MAPA.setView([pos.lat,pos.lng],15); } },()=>toast("Não consegui a localização."),{enableHighAccuracy:true,timeout:10000}); };
+  carregarLeaflet().then(()=>{
+    const Lf=window.L, box=$("#mapaBox"); if(!box) return;
+    if(MAPA){ MAPA.remove(); MAPA=null; }
+    MAPA=Lf.map(box,{zoomControl:true});
+    Lf.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap"}).addTo(MAPA);
+    const lista=Ls.filter(l=>l.lat&&(!mapaRegiao||(l.regiao_nome||"Outra")===mapaRegiao));
+    CAMADA=Lf.featureGroup().addTo(MAPA);
+    lista.forEach(l=>{
+      const s=st(l.id), cor=COR[s.status]||"#9ca3af", feito=!["abordar"].includes(s.status);
+      const m=Lf.circleMarker([l.lat,l.lng],{radius:feito?9:6,color:"#fff",weight:feito?2:1,fillColor:cor,fillOpacity:.95}).addTo(CAMADA);
+      m.bindPopup(`<b>${esc(l.nome)}</b><br>${esc((SEG[l.segmento]||{}).nome||"")} · ${esc(STATUS_NOME[s.status])}${s.visita&&s.status==="agendada"?"<br>Visita: "+esc(fmtData(s.visita)):""}<br><button data-abrir="${l.id}" style="margin-top:6px">Abrir loja</button>`);
+      m.on("popupopen",ev=>{ const b=ev.popup.getElement().querySelector("[data-abrir]"); if(b) b.onclick=()=>openLead(l.id); });
+    });
+    if(lista.length) MAPA.fitBounds(CAMADA.getBounds().pad(0.08)); else MAPA.setView([-16.68,-49.28],12);
+  }).catch(()=>{ $("#mapaBox").innerHTML='<p class="empty">Não consegui carregar o mapa. Confira a internet.</p>'; });
 }
 
 /* ============================== PAINEL ============================== */
@@ -768,13 +843,13 @@ async function sync(avisar){
 }
 
 /* ============================== NAV ============================== */
-const TITULOS={hoje:"Hoje",leads:"Lojas",painel:"Painel",mais:"Mais"};
+const TITULOS={hoje:"Hoje",leads:"Lojas",mapa:"Mapa",painel:"Painel",mais:"Mais"};
 document.querySelectorAll("nav.tabs button").forEach(b=>b.onclick=()=>{ view=b.dataset.v; document.querySelectorAll("nav.tabs button").forEach(x=>x.classList.toggle("on",x===b)); render(); scrollTo(0,0); });
 function render(){
   $("#viewTitle").textContent=TITULOS[view];
-  ["hoje","leads","painel","mais"].forEach(v=>$("#v-"+v).classList.toggle("hidden",v!==view));
+  ["hoje","leads","mapa","painel","mais"].forEach(v=>$("#v-"+v).classList.toggle("hidden",v!==view));
   renderTop();
-  if(view==="hoje") renderHoje(); else if(view==="leads") renderLeads(); else if(view==="painel") renderPainel(); else renderMais();
+  if(view==="hoje") renderHoje(); else if(view==="leads") renderLeads(); else if(view==="mapa") renderMapa(); else if(view==="painel") renderPainel(); else renderMais();
 }
 function start(){
   $("#lockView").classList.add("hidden"); $("#app").classList.remove("hidden");
